@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# RKE2 Version
+RKE2_RELEASE=v1.24.8+rke2r1
+
+# get tarball and image checks
+wget https://github.com/rancher/rke2/releases/download/$RKE2_RELEASE/rke2-images.linux-amd64.tar.zst
+wget https://github.com/rancher/rke2/releases/download/$RKE2_RELEASE/rke2.linux-amd64.tar.gz
+wget https://github.com/rancher/rke2/releases/download/$RKE2_RELEASE/sha256sum-amd64.txt
+wget https://kube-vip.io/manifests/rbac.yaml -O kube-vip-rbac.yaml
+
+# get rke2 install script
+curl -sfL https://get.rke2.io > install_rke2.sh
+chmod +x install_rke2.sh
+
+# get kubevip
+curl -sL kube-vip.io/k3s > install_kubevip.sh
+chmod +x install_kubevip.sh

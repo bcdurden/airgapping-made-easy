@@ -1,0 +1,102 @@
+#!/bin/bash
+# Carbide Registry
+# SOURCE_REGISTRY=rgcrprod.azurecr.us
+# SOURCE_REGISTRY_USER=$1
+# SOURCE_REGISTRY_PASS=$2
+
+
+# Working directories & TAR
+DEST_DIRECTORY=/tmp/cert-manager-images
+DEST_TAR=/tmp/cert-manager-images.tar.gz  # Change this to the location you want for your resulting TAR 
+
+# Cert Manager Chart Version
+CERT_MANAGER_RELEASE=v1.8.1
+
+if [[ -d "$DEST_DIRECTORY" ]]; then
+    echo "ERROR: Directory '$DEST_DIRECTORY' exists."
+    echo "Change or delete it before running."
+    exit 1
+fi
+
+if [[ -d "$DEST_TAR" ]]; then
+    echo "ERROR: Directory '$DEST_TAR' exists."
+    echo "Change or delete it before running."
+    exit 1
+fi
+
+# cosign login -u $SOURCE_REGISTRY_USER -p $SOURCE_REGISTRY_PASS $SOURCE_REGISTRY
+mkdir -p "$DEST_DIRECTORY"
+
+# Add the cert manager repo (required Helm)
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+
+# Grab the list of images and download them (requires docker, grep, sed, and awk)
+for image in $(helm template jetstack/cert-manager --version $CERT_MANAGER_RELEASE | grep 'image:' | sed 's/"//g' | awk '{ print $2 }'); do
+    source_image=$image
+    dest_image=$(echo $image | sed "s/quay.io/TARGET_REGISTRY/g")
+    
+    # Create manifest to use during load
+    img_dir=$(mktemp -d $DEST_DIRECTORY/cert-image.XXXXXXX)
+    img_id_num=${img_dir: -18}
+    echo "$img_id_num|$dest_image" >> $DEST_DIRECTORY/manifest.txt
+    
+    # Save image locally
+    printf "Exporting $source_image\n"
+    cosign save --dir "$img_dir" $source_image
+    if [ $? != 0 ]; then
+      cosign save --dir "$DEST_DIRECTORY/$img_id_num" $source_image
+    fi
+done
+
+# Compress directory
+tar zcf "$DEST_TAR" -C "$DEST_DIRECTORY" .
+
+# Clean up working directory
+rm -rf $DEST_DIRECTORY
+
+# Working directories & TAR
+DEST_DIRECTORY=/tmp/rancher-images
+DEST_TAR=/tmp/rancher-images.tar.gz  # Change this to the location you want for your resulting TAR 
+
+# Longhorn Version
+RANCHER_RELEASE=v2.7.0
+
+if [[ -d "$DEST_DIRECTORY" ]]; then
+    echo "ERROR: Directory '$DEST_DIRECTORY' exists."
+    echo "Change or delete it before running."
+    exit 1
+fi
+
+if [[ -d "$DEST_TAR" ]]; then
+    echo "ERROR: Directory '$DEST_TAR' exists."
+    echo "Change or delete it before running."
+    exit 1
+fi
+
+mkdir -p "$DEST_DIRECTORY"
+
+RANCHER_IMAGES=$(curl --silent -L https://github.com/rancher/rancher/releases/download/$RANCHER_RELEASE/rancher-images.txt)
+for image in $RANCHER_IMAGES; do
+    source_image="$image"
+    dest_image="TARGET_REGISTRY/$image"
+    
+    # Create manifest to use during load
+    img_dir=$(mktemp -d $DEST_DIRECTORY/rancher-image.XXXXXXX)
+    img_id_num=${img_dir: -21}
+    echo "$img_id_num|$dest_image" >> $DEST_DIRECTORY/manifest.txt
+    
+    # Save image locally
+    printf "Exporting $source_image\n"
+    cosign save --dir "$img_dir" $source_image
+    if [ $? != 0 ]; then
+      cosign save --dir "$DEST_DIRECTORY/$img_id_num" $source_image
+    fi
+done
+
+# Compress directory
+printf "Compresing Rancher images...\n"
+tar zcf "$DEST_TAR" -C "$DEST_DIRECTORY" .
+
+# Clean up working directory
+rm -rf $DEST_DIRECTORY

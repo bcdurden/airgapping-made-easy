@@ -1,0 +1,37 @@
+#!/bin/bash
+# Remote Registry
+TARGET_REGISTRY=$1
+TARGET_REGISTRY_USER=$2
+TARGET_REGISTRY_PASSWORD=$3
+
+# Source and Working Files
+SOURCE_TAR=$4
+WORKING_DIR=/tmp/images  # Change this if desired/necessary
+
+if [[ ! -f "$SOURCE_TAR" ]]; then
+    echo "ERROR: Tarball '$SOURCE_TAR' not found."
+    exit 1
+fi
+
+if [[ -d "$WORKING_DIR" ]]; then
+    echo "ERROR: Working directory '$WORKING_DIR' exists."
+    echo "Remove it or change the value."
+    exit 1
+fi
+
+cosign login -u $TARGET_REGISTRY_USER -p $TARGET_REGISTRY_PASSWORD $TARGET_REGISTRY
+
+mkdir -p "$WORKING_DIR"
+tar zxf "$SOURCE_TAR" -C "$WORKING_DIR"
+
+for image in $(cat $WORKING_DIR/manifest.txt); do
+    img_id=$(printf $image | cut -d "|" -f 1)
+    dest_image=$(printf "$image" | cut -d "|" -f 2 | sed "s|TARGET_REGISTRY|$TARGET_REGISTRY|g")
+    printf "===>Pushing $dest_image\n";
+    RESULT=$(cosign load --dir $WORKING_DIR/$img_id $dest_image)
+    if [ $? != 0 ]; then
+      printf "Error detected: $RESULT\n"
+    fi
+done
+
+rm -rf $WORKING_DIR
