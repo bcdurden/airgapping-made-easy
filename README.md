@@ -478,9 +478,11 @@ Terraform is an infrastructure provisioning tool that we can use to spin up airg
 We can also find a shortcut in this process speed-wise by creating prebuilt VM images that already contain every necessary component on them and them import those VM images into our airgap as well.
 
 > * [Prep Harvester Image](#prep-harvesters-ubuntu-os-image)
+> * [Prep Terraform](#prep-terraform)
+> * [Install via Terraform](#install-via-terraform)
 
 ## Prep Harvester's Ubuntu OS Image
-To make this special image, we'll need to pull down the previously mentioned OS image to our local workstation and then do some work upon it using `guestfs` tools. This is slightly involved, but once finished, you'll have 80% of the manual steps above canned into a single image making it very easy to automate in an airgap.
+To make this special image, we'll need to pull down the previously mentioned OS image to our local workstation and then do some work upon it using `guestfs` tools. This is slightly involved, but once finished, you'll have 80% of the manual steps above canned into a single image making it very easy to automate in an airgap. If you are not using Harvester, this image is in qcow2 format and should be usable in different HCI solutions, however your Terraform code will look different. Try to follow along, regardless, so the process around how you would bootstrap the cluster (and Rancher) from Terraform is understood at a high-level.
 
 ```bash
 wget http://cloud-images.ubuntu.com/releases/focal/release/ubuntu-20.04-server-cloudimg-amd64.img
@@ -540,6 +542,7 @@ sudo virt-customize -a ubuntu-rke2.img --run-command "mkdir -p /var/lib/rancher/
 sudo virt-customize -a ubuntu-rke2.img --run-command "cd /var/lib/rancher/rke2-artifacts && curl -sLO https://github.com/rancher/rke2/releases/download/v1.24.8+rke2r1/rke2.linux-amd64.tar.gz"
 sudo virt-customize -a ubuntu-rke2.img --run-command "cd /var/lib/rancher/rke2-artifacts && curl -sLO https://github.com/rancher/rke2/releases/download/v1.24.8+rke2r1/sha256sum-amd64.txt"
 sudo virt-customize -a ubuntu-rke2.img --run-command "cd /var/lib/rancher/rke2-artifacts && curl -sLO https://github.com/rancher/rke2/releases/download/v1.24.8+rke2r1/rke2-images.linux-amd64.tar.zst"
+sudo virt-customize -a ubuntu-rke2.img --run-command "echo -n > /etc/machine-id"
 ```
 
 If we look at the image we just created, we can see it is quite large!
@@ -645,5 +648,348 @@ drwxr-xr-x 3 root root 4096 Dec 19 14:37 ../
 
 We can see here that all the files I copied in are now present and ready! We can copy this image to physical media along with our container images and use it as a prepped RKE2 node image. When using it, we only need to tweak the cloud-init to create/join a cluster with a certain config!
 
-* Get harvester kubeconfig
-* Install via Terraform
+## Prep Terraform
+We're going to be using Terraform to provision Harvester-level components and use K8S as a stateful storage. And we're going to keep it relatively simple, so no custom modules. For this, we'll need the Harvester provider among a few other things:
+
+```hcl
+terraform {
+  required_version = ">= 0.13"
+  required_providers {
+    harvester = {
+      source  = "harvester/harvester"
+      version = "0.6.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "2.2.3"
+    }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "3.4.0"
+    }
+    ssh = {
+      source  = "loafoe/ssh"
+      version = "1.2.0"
+    }
+  }
+  backend "kubernetes" {
+    secret_suffix    = "state-rke2"
+    config_path      = "~/.kube/config"
+  }
+}
+
+provider "harvester" {
+}
+provider "helm" {
+  kubernetes {
+    config_path = var.kubeconfig_filename
+  }
+}
+```
+
+Also, we'll want to refer to the vlan network we've been using, `services` in my case, as well as the image we just created (named `ubuntu-rke2-airgap` in previous steps). So let's create a data file that imports these pre-created components and allows us to refer to them in the other Terraform code:
+```hcl
+data "harvester_network" "services" {
+  name      = "services"
+  namespace = "default"
+}
+data "harvester_image" "ubuntu-rke2-airgap" {
+  name      = "ubuntu-rke2-airgap"
+  namespace = "default"
+}
+```
+
+One of the powerful features of Terraform is it allows us to templatize things like cloud-init where we can write a generic expression that then can work for all similar cases with simple variable tweaks. We're not going crazy here, but I am going to extract a few hardcoded values into a `variables.tf` file that allows us to define some defaults and potentially override them later if we want to try different options out. We're also going to generate an SSH key as part of this.
+
+Here's the `variables.tf` file and all of these entries should be pretty self-explanatory as to their purpose (and you've seen them before in the manual provisioning above!):
+```hcl
+variable "cp-hostname" {
+    type = string
+    default = "rke2-airgap-cp"
+}
+variable "worker-hostname" {
+    type = string
+    default = "rke2-airgap-worker"
+}
+variable "master_vip" {
+    type = string
+    default = "10.10.5.4"
+}
+variable "cluster_token" {
+    type = string
+    default = "my-shared-token"
+}
+variable "rke2_registry" {
+    type = string
+    default = "harbor.sienarfleet.systems"
+}
+variable "master_vip_interface" {
+    type = string
+    default = "enp1s0"
+}
+```
+
+Upon inspection of the control-plane node Terraform spec, we can see where the cloud-init has become templatized. Also note vs our earlier cloud-init config, we are no longer downloading any code; we're just running the scripts we pre-installed in the image-creation steps above.
+```hcl
+cloudinit {
+  type      = "noCloud"
+  user_data    = <<EOT
+    #cloud-config
+    write_files:
+    - path: /etc/rancher/rke2/config.yaml
+      owner: root
+      content: |
+        token: ${var.cluster_token}
+        server: https://${var.cp-hostname}:9345
+        system-default-registry: ${var.rke2_registry}
+    - path: /etc/hosts
+      owner: root
+      content: |
+        127.0.0.1 localhost
+        127.0.0.1 ${var.worker-hostname}
+        ${var.master_vip} ${var.cp-hostname}
+    - path: /etc/rancher/rke2/registries.yaml
+      owner: root
+      content: |
+        mirrors:
+          docker.io:
+            endpoint:
+              - "https://${var.rke2_registry}"
+          ${var.rke2_registry}:
+            endpoint:
+              - "https://${var.rke2_registry}"
+    runcmd:
+    - - systemctl
+      - enable
+      - '--now'
+      - qemu-guest-agent.service
+    - INSTALL_RKE2_TYPE="agent" INSTALL_RKE2_ARTIFACT_PATH=/var/lib/rancher/rke2-artifacts sh /var/lib/rancher/install.sh
+    - systemctl enable rke2-agent.service
+    - systemctl start rke2-agent.service
+    ssh_authorized_keys: 
+    - ${tls_private_key.rsa_key.public_key_openssh}
+  EOT
+  network_data = ""
+}
+```
+
+### Harvester Kubeconfig
+
+Before running Terraform, we'll need to pull down the kubeconfig. In Harvester, this can be acquired by going to the `Support` page via clicking the link in the bottom-left corner of the screen. After this, click the `Download kubeconfig` button and save it to your local workstation. If you are not using Harvester, this Terrform will need to be modified to suit your environment. I'll use `kubecm` here to manage my kubecontext.
+
+```console
+> kubecm add -f harvester.yaml
+Add Context: harvester 
+👻 True
+「harvester.yaml」 write successful!
++------------+----------------+-----------------------+-----------------------+-----------------------------------+--------------+
+|   CURRENT  |      NAME      |        CLUSTER        |          USER         |               SERVER              |   Namespace  |
++============+================+=======================+=======================+===================================+==============+
+|     *      |    harvester   |         local         |         local         |   https://10.10.0.4/k8s/clusters  |    default   |
+|            |                |                       |                       |               /local              |              |
++------------+----------------+-----------------------+-----------------------+-----------------------------------+--------------+
+```
+
+### Test Terraform
+
+So let's test the Terraform environment and ensure it has everything we need. As part of this, I have the previously-mentioned python3 service running to host the image live. You should see no errors as of running the commands below:
+
+```bash
+cd terraform
+terraform init
+terraform plan
+```
+
+```console
+> cd ..
+> cd terraform
+terraform init
+terraform plan
+
+Initializing the backend...
+
+Successfully configured the backend "kubernetes"! Terraform will automatically
+use this backend unless the backend configuration changes.
+
+Initializing provider plugins...
+- Reusing previous version of harvester/harvester from the dependency lock file
+- Reusing previous version of hashicorp/local from the dependency lock file
+- Reusing previous version of hashicorp/helm from the dependency lock file
+- Reusing previous version of hashicorp/tls from the dependency lock file
+- Reusing previous version of loafoe/ssh from the dependency lock file
+- Installing loafoe/ssh v1.2.0...
+- Installed loafoe/ssh v1.2.0 (self-signed, key ID C0E4EB79E9E6A23D)
+- Installing harvester/harvester v0.6.1...
+- Installed harvester/harvester v0.6.1 (self-signed, key ID 09C96FC8D69CF335)
+- Installing hashicorp/local v2.2.3...
+- Installed hashicorp/local v2.2.3 (signed by HashiCorp)
+
+...
+
+  # tls_private_key.rsa_key will be created
+  + resource "tls_private_key" "rsa_key" {
+      + algorithm                     = "RSA"
+      + ecdsa_curve                   = "P224"
+      + id                            = (known after apply)
+      + private_key_openssh           = (sensitive value)
+      + private_key_pem               = (sensitive value)
+      + public_key_fingerprint_md5    = (known after apply)
+      + public_key_fingerprint_sha256 = (known after apply)
+      + public_key_openssh            = (known after apply)
+      + public_key_pem                = (known after apply)
+      + rsa_bits                      = 4096
+    }
+
+Plan: 9 to add, 0 to change, 0 to destroy.
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+Note: You didn't use the -out option to save this plan, so Terraform can't guarantee to take exactly these actions if you run "terraform apply" now.
+```
+
+## Install via Terraform
+Now that all the previous steps are done, we can call `terraform apply` and create our airgapped RKE2+Rancher instance in a declarative fashion! We can also now continuously make changes to the Terraform code and add/update components without tearing the whole thing down.
+
+```bash
+terraform apply
+```
+
+Truncated results:
+```console
+> terraform apply
+data.harvester_network.services: Reading...
+data.harvester_network.services: Read complete after 0s [id=default/services]
+
+Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # harvester_image.ubuntu-rke2-airgap will be created
+  + resource "harvester_image" "ubuntu-rke2-airgap" {
+      + display_name              = "ubuntu-rke2-airgap"
+      + id                        = (known after apply)
+
+...
+
+  # tls_private_key.rsa_key will be created
+  + resource "tls_private_key" "rsa_key" {
+      + algorithm                     = "RSA"
+      + ecdsa_curve                   = "P224"
+      + id                            = (known after apply)
+      + private_key_openssh           = (sensitive value)
+      + private_key_pem               = (sensitive value)
+      + public_key_fingerprint_md5    = (known after apply)
+      + public_key_fingerprint_sha256 = (known after apply)
+      + public_key_openssh            = (known after apply)
+      + public_key_pem                = (known after apply)
+      + rsa_bits                      = 4096
+    }
+
+Plan: 9 to add, 0 to change, 0 to destroy.
+
+Do you want to perform these actions?
+  Terraform will perform the actions described above.
+  Only 'yes' will be accepted to approve.
+
+  Enter a value: yes
+
+tls_private_key.rsa_key: Creating...
+harvester_image.ubuntu-rke2-airgap: Creating...
+tls_private_key.rsa_key: Creation complete after 1s [id=d5b177434fa5a4f41e83c16e56a292e476766d9b]
+harvester_ssh_key.rke2-key: Creating...
+harvester_ssh_key.rke2-key: Creation complete after 0s [id=default/rke2-key]
+harvester_image.ubuntu-rke2-airgap: Still creating... [10s elapsed]
+
+...
+
+harvester_virtualmachine.worker-node (remote-exec): Connected!
+harvester_virtualmachine.worker-node (remote-exec): Waiting for cloud-init to complete...
+harvester_virtualmachine.worker-node: Still creating... [50s elapsed]
+harvester_virtualmachine.worker-node: Still creating... [1m0s elapsed]
+harvester_virtualmachine.worker-node: Still creating... [1m10s elapsed]
+harvester_virtualmachine.worker-node: Still creating... [1m20s elapsed]
+harvester_virtualmachine.worker-node (remote-exec): Completed cloud-init!
+harvester_virtualmachine.worker-node: Creation complete after 1m29s [id=default/rke2-airgap-worker]
+helm_release.cert_manager: Creating...
+helm_release.cert_manager: Still creating... [10s elapsed]
+helm_release.cert_manager: Still creating... [20s elapsed]
+helm_release.cert_manager: Creation complete after 20s [id=cert-manager]
+helm_release.rancher_server: Creating...
+helm_release.rancher_server: Still creating... [10s elapsed]
+helm_release.rancher_server: Still creating... [20s elapsed]
+helm_release.rancher_server: Still creating... [30s elapsed]
+helm_release.rancher_server: Still creating... [40s elapsed]
+helm_release.rancher_server: Still creating... [50s elapsed]
+helm_release.rancher_server: Still creating... [1m0s elapsed]
+helm_release.rancher_server: Creation complete after 1m5s [id=rancher]
+```
+
+At this point, Rancher is now starting! I can use the local kubeconfig that was generated as part of Terraform to view the cluster with `kubectl`
+```console
+kubecm add -f kube_config.yaml
+Add Context: kube_config 
+👻 True
+「kube_config.yaml」 write successful!
++------------+----------------+-----------------------+-----------------------+-----------------------------------+--------------+
+|   CURRENT  |      NAME      |        CLUSTER        |          USER         |               SERVER              |   Namespace  |
++============+================+=======================+=======================+===================================+==============+
+|            |      edge      |   default-mhcbhggf57  |   default-mhcbhggf57  |       https://10.10.5.4:6443      |    default   |
++------------+----------------+-----------------------+-----------------------+-----------------------------------+--------------+
+|      *     |    harvester   |         local         |         local         |   https://10.10.0.4/k8s/clusters  |    default   |
+|            |                |                       |                       |               /local              |              |
++------------+----------------+-----------------------+-----------------------+-----------------------------------+--------------+
+|            |   kube_config  |   default-kg2b9m5685  |   default-kg2b9m5685  |       https://10.10.5.4:6443      |    default   |
++------------+----------------+-----------------------+-----------------------+-----------------------------------+--------------+
+|            |   rancher-aws  |        default        |        default        |   https://multicloud-demo-apiser  |    default   |
+|            |                |                       |                       |   ver-lb-394fae85700f466a.elb.us  |              |
+|            |                |                       |                       |   -gov-west-1.amazonaws.com:6443  |              |
++------------+----------------+-----------------------+-----------------------+-----------------------------------+--------------+
+
+> kc get nodes
+NAME                 STATUS   ROLES                       AGE   VERSION
+rke2-airgap-cp       Ready    control-plane,etcd,master   12m   v1.24.8+rke2r1
+rke2-airgap-worker   Ready    <none>                      10m   v1.24.8+rke2r1
+> kubectx kube_config
+Switched to context "kube_config".
+kc get po -A
+NAMESPACE                   NAME                                                   READY   STATUS      RESTARTS        AGE
+cattle-fleet-local-system   fleet-agent-7757f7cd44-6fr2k                           1/1     Running     0               2m47s
+cattle-fleet-system         fleet-controller-6f8cfbc695-jr552                      1/1     Running     0               3m5s
+cattle-fleet-system         gitjob-698b767dd9-mn4cd                                1/1     Running     0               3m5s
+cattle-system               helm-operation-8kcrw                                   0/2     Completed   0               3m25s
+cattle-system               helm-operation-b9gj2                                   0/2     Completed   0               3m8s
+cattle-system               helm-operation-sv4ll                                   0/2     Completed   0               2m56s
+cattle-system               rancher-6bb986f996-kfk67                               1/1     Running     0               4m16s
+cattle-system               rancher-6bb986f996-vmmw4                               1/1     Running     1 (3m51s ago)   4m16s
+cattle-system               rancher-6bb986f996-wl9fb                               1/1     Running     0               4m16s
+cattle-system               rancher-webhook-6954b76798-fmdjc                       1/1     Running     0               2m54s
+cert-manager                cert-manager-bbbbf6b84-t4hwp                           1/1     Running     0               4m34s
+cert-manager                cert-manager-cainjector-64ccbb9549-7wk5f               1/1     Running     0               4m34s
+cert-manager                cert-manager-webhook-68f548574b-m8w5d                  1/1     Running     0               4m34s
+kube-system                 cloud-controller-manager-rke2-airgap-cp                1/1     Running     0               8m10s
+kube-system                 etcd-rke2-airgap-cp                                    1/1     Running     0               8m9s
+kube-system                 helm-install-rke2-canal-cgkgw                          0/1     Completed   0               7m59s
+kube-system                 helm-install-rke2-coredns-78hqg                        0/1     Completed   0               7m59s
+kube-system                 helm-install-rke2-ingress-nginx-2wxwd                  0/1     Completed   0               7m59s
+kube-system                 helm-install-rke2-metrics-server-hr9zh                 0/1     Completed   0               7m59s
+kube-system                 kube-apiserver-rke2-airgap-cp                          1/1     Running     0               8m8s
+kube-system                 kube-controller-manager-rke2-airgap-cp                 1/1     Running     0               8m11s
+kube-system                 kube-proxy-rke2-airgap-cp                              1/1     Running     0               8m9s
+kube-system                 kube-proxy-rke2-airgap-worker                          1/1     Running     0               6m40s
+kube-system                 kube-scheduler-rke2-airgap-cp                          1/1     Running     0               8m10s
+kube-system                 kube-vip-ds-xqhlb                                      1/1     Running     0               7m40s
+kube-system                 rke2-canal-nhqsq                                       2/2     Running     0               7m55s
+kube-system                 rke2-canal-zfw9c                                       2/2     Running     0               6m41s
+kube-system                 rke2-coredns-rke2-coredns-5cc9cf4f97-cxchh             1/1     Running     0               7m56s
+kube-system                 rke2-coredns-rke2-coredns-5cc9cf4f97-slhcc             1/1     Running     0               6m38s
+kube-system                 rke2-coredns-rke2-coredns-autoscaler-c58946548-nsqhf   1/1     Running     0               7m56s
+kube-system                 rke2-ingress-nginx-controller-4p9qh                    1/1     Running     0               6m31s
+kube-system                 rke2-ingress-nginx-controller-x5fqf                    1/1     Running     0               7m31s
+kube-system                 rke2-metrics-server-6d49759bf5-pjsfg                   1/1     Running     0               7m37s
+```
+
+# Conclusion
+That concludes these walk-throughs. I'm hopeful the information within is useful and you're able to re-use some of it to shortcut yourself to success and maybe learn about new things!
+
+Feel free to reach out to me via email: brian.durden@rancherfederal.com

@@ -1,0 +1,34 @@
+#cloud-config
+write_files:
+- path: /etc/rancher/rke2/config.yaml
+  owner: root
+  content: |
+    token: my-shared-token
+    server: https://rke2-airgap-cp:9345
+- path: /etc/hosts
+  owner: root
+  content: |
+    127.0.0.1 localhost
+    127.0.0.1 rke2-airgap-worker
+    10.10.5.4 rke2-airgap-cp
+- path: /etc/rancher/rke2/registries.yaml
+  owner: root
+  content: |
+    mirrors:
+      docker.io:
+        endpoint:
+          - "https://harbor.sienarfleet.systems"
+      harbor.sienarfleet.systems:
+        endpoint:
+          - "https://harbor.sienarfleet.systems"
+runcmd:
+- - systemctl
+  - enable
+  - '--now'
+  - qemu-guest-agent.service
+- INSTALL_RKE2_TYPE="agent" INSTALL_RKE2_ARTIFACT_PATH=/var/lib/rancher/rke2-artifacts sh /var/lib/rancher/install.sh
+- systemctl enable rke2-agent.service
+- systemctl start rke2-agent.service
+ssh_authorized_keys:
+  - ssh-rsa
+    AAAAB3NzaC1yc2EAAAADAQABAAACAQDZk5zkAj2wbSs1r/AesCC7t6CtF6yxmCjlXgzqODZOujVscV6PZzIti78dIhv3Yqtii/baFH0PfqoHZk9eayjZMcp+K+6bi4lSwszzDhV3aGLosPRNOBV4uT+RToEmiXwPtu5rJSRAyePu0hdbuOdkaf0rGjyUoMbqJyGuVIO3yx/+zAuS8hFGeV/rM2QEhzPA4QiR40OAW9ZDyyTVDU0UEhwUNQESh+ZM2X9fe5VIxNZcydw1KGwzj8t+6WuYBFvPKYR5sylAnocBWzAGKh+zHgZU5O5TwC1E92uPgUWNwMoFdyZRaid0sKx3O3EqeIJZSqlfoFhz3Izco+QIx4iqXU9jIVFtnTb9nCN/boXx7uhCfdaJ0WdWQEQx+FX092qE6lfZFiaUhZI+zXvTeENqVfcGJSXDhDqDx0rbbpvXapa40XZS/gk0KTny2kYXBATsUwZqmPpZF9njJ+1Hj/KSNhFQx1LcIQVvXP+Ie8z8MQleaTTD0V9+Zkw2RBkVPYc5Vb8m8XCy1xf4DoP6Bmb4g3iXS17hYQEKj1bfBMbDfZdexbSPVOUPXUMR2aMxz8R3OaswPimLmo0uPiyYtyVQCuJu62yrao33knVciV/xlifFsqrNDgribDNr4RKnrIX2eyszCiSv2DoZ6VeAhg8i6v6yYL7RhQM31CxYjnZK4Q==
