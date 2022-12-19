@@ -7,12 +7,20 @@ author: Brian Durden
 ## Intro
 
 ## Use Case and Scope
-* Hard Way
-* Easy Way
+There are a few use cases addressed here, but each bears some early discussion. This document will cover provisioning and bootstrapping a Rancher Cluster Manager with RKE2 in a manual way and in a more declarative way using Terraform. Both cases will cover a soft-airgap scenario where internal networks do not have or should not have access to the internet or external networks as a general rule. While some cases to exist where a soft-airgap can make use of a whitelist of domains/IPs, we'll assume that doesn't exist in this case.
+
+Given this airgap need, we'll need to have everything that is normally pulled or used in the public cloud available within our private environment. This covers everything from container images, code, scripts, and config files. Because of this, airgapping can involve a significant amount of toil for basic use-cases making it difficult and time-consuming to keep the system up to date and patched. This doc will cover all of that work as well as provide some helpful tools to make this process as easy as possible.
+
+After manually provisioning, we'll redo the scenario using Terraform and prebuild a node VM image that contains all binaries on it that we need thus turning our bootstrap mechanism into a configuration-as-code pattern.
 
 ### What is an AirGap?
-* Soft
-* Hard
+The term `airgap` is as ambiguous around the tech industry as the words `BBQ` around the world. Depending on who you talk to, it can mean something totally different and not just the actual implementation but the processes/rules around it too.
+
+We'll simplify the discussion and separate airgaps into two distinct categories here: soft and hard. Throughout this document, we'll reference various things to consider when handling either type, but the demo will be based around a soft airgap.
+
+The `hard airgap` is pretty self explanatory in that the network and systems running in that network are physically airgapped and likely have process and security controls around them where even using direct connects and certain physical media like USB drives is prevented or not allowed. The hard airgap is more common in the SCIF and can be a bit more difficult to navigate depending on implementation of network services like DHCP and DNS. There is very rarely any kind of internet access in these environments, so it should be assumed it will not be there. When accessing this kind of airgap, there will usually be some kind of workstation inside the gap that can be used to make changes to the environment. Because of this, all images must be copied to an allowable physical media (such as bluray) based on security controls and then physically brought into the environment at this workstation.
+
+The `soft airgap` can be a bit more ambiguous than the hard variety, but it uses software (usually) to separate the environments at the network level. This is usually via the usage of VLANs and robust firewalls that control where network packets can go and what kinds are allowed. In these environments, internet access is usually non-existant or heavily regulated by ACLs. It is this kind of airgap that we will use. Here, a jumpbox can usually be made use of that the local user has specific access to. From that jumpbox, the user can interact with the environment (but not outside of it). In this case, the images and binaries would need to be copied up to the jumpbox before being pushed into the environment. We'll be using an Ubuntu 20.04 jumpbox here.
 
 ## Prereqs
 * Infrastructure on which to deploy (we use Harvester here, but just about anything works) and that infra being configured.
@@ -39,6 +47,8 @@ In order to do this, you'll need to pull down all of these images onto a local w
 > * [Get kubeconfig](#get-kubeconfig)
 > * [Kick off worker node](#kick-off-worker-node)
 > * [Rancher Install](#rancher-install)
+
+This section will cover manual provisioning. And while its a bit involved, it's important to understand what the steps are and why it's so important to automate. We'll refer to a few of these sections later when we are doing more 'real' methods of bootstrapping with Terraform.
 
 ## Prep Environment
 Prior to moving into the airgap, we need to prep our physical media with the binaries of everything we're going to need inside the gap. In a hard airgap, such as a SCIF, this will generally mean something like BluRay media; but in a soft airgap, it will involve pushing to a jumpbox of sorts that we have access to in that environment.
