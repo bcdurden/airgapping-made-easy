@@ -190,6 +190,7 @@ auth.go:191: logged in via /home/ubuntu/.docker/config.json
 ```
 
 Now that all container images have been pushed, I'll do a quick inspection of Harbor to ensure the artifacts are there.
+
 ![harbor](images/harbor.png)
 
 ## Provision VMs
@@ -489,7 +490,7 @@ wget http://cloud-images.ubuntu.com/releases/focal/release/ubuntu-20.04-server-c
 sudo apt install -y libguestfs-tools
 ```
 
-Befor we get started, we'll need to expand the filesystem of the cloud image because some of the files we are downloading are a little large. I'm using 3 gigs here, but if you're goingt to install something large like nvidia-drivers, use as much space as you like. We'll condense the image back down later.
+Befor we get started, we'll need to expand the filesystem of the cloud image because some of the files we are downloading are a little large. I'm using 3 gigs here, but if you're going to install something large like nvidia-drivers, use as much space as you like. We'll condense the image back down later.
 ```bash
 sudo virt-filesystems --long -h --all -a olddisk
 truncate -r ubuntu-20.04-server-cloudimg-amd64.img ubuntu-rke2.img
@@ -693,9 +694,13 @@ data "harvester_network" "services" {
   name      = "services"
   namespace = "default"
 }
-data "harvester_image" "ubuntu-rke2-airgap" {
+resource "harvester_image" "ubuntu-rke2-airgap" {
   name      = "ubuntu-rke2-airgap"
   namespace = "default"
+
+  display_name = "ubuntu-rke2-airgap"
+  source_type  = "download"
+  url          = "http://10.10.5.163:9900/ubuntu-rke2-airgap-harvester.img"
 }
 ```
 
