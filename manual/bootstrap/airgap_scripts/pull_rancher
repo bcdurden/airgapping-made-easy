@@ -1,9 +1,4 @@
 #!/bin/bash
-# Carbide Registry
-# SOURCE_REGISTRY=rgcrprod.azurecr.us
-# SOURCE_REGISTRY_USER=$1
-# SOURCE_REGISTRY_PASS=$2
-
 
 # Working directories & TAR
 DEST_DIRECTORY=/tmp/cert-manager-images

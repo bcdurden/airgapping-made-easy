@@ -500,15 +500,33 @@ wget http://cloud-images.ubuntu.com/releases/focal/release/ubuntu-20.04-server-c
 sudo apt install -y libguestfs-tools
 ```
 
-Befor we get started, we'll need to expand the filesystem of the cloud image because some of the files we are downloading are a little large. I'm using 3 gigs here, but if you're going to install something large like nvidia-drivers, use as much space as you like. We'll condense the image back down later.
+Before we get started, we'll need to expand the filesystem of the cloud image because some of the files we are downloading are a little large. I'm using 3 gigs here, but if you're going to install something large like nvidia-drivers, use as much space as you like. We'll condense the image back down later.
 ```bash
-sudo virt-filesystems --long -h --all -a olddisk
+sudo virt-filesystems --long -h --all -a ubuntu-20.04-server-cloudimg-amd64.img
 truncate -r ubuntu-20.04-server-cloudimg-amd64.img ubuntu-rke2.img
 truncate -s +3G ubuntu-rke2.img
 sudo virt-resize --expand /dev/sda1 ubuntu-20.04-server-cloudimg-amd64.img ubuntu-rke2.img
 ```
 
 Unfortunately `virt-resize` will also rename the partitions, which will screw up the bootloader. We now have to fix that by using virt-rescue and calling grub-install on the disk.
+
+Start the `virt-rescue` app like this:
+```bash
+sudo virt-rescue ubuntu-rke2.img 
+```
+
+And then paste these commands in after the rescue app finishes starting:
+```bash
+mkdir /mnt
+mount /dev/sda3 /mnt
+mount --bind /dev /mnt/dev
+mount --bind /proc /mnt/proc
+mount --bind /sys /mnt/sys
+chroot /mnt
+grub-install /dev/sda
+```
+
+After that you can exit hitting `ctrl ]` and then hitting `q`.
 ```console
 sudo virt-rescue ubuntu-rke2.img 
 WARNING: Image format was not specified for '/home/ubuntu/ubuntu-rke2.img' and probing guessed raw.
