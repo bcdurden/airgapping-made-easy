@@ -36,7 +36,7 @@ The `soft airgap` can be a bit more ambiguous than the hard variety, but it uses
 ### Image Repo
 When working in an airgap, it is necessary to bring all of your container images into a trusted source. This is usually called generically an `Image Store`. This location is a centralized source of truth that your RKE2 cluster, Rancher Cluster Manager, and all downstream clusters in this environment can pull their container images from (as opposed to the public cloud).
 
-In order to do this, you'll need to pull down all of these images onto a local workstation and then either copy them into your softairgap via jumpbox or bring into your hard airgap using physical media like BluRay or a USB key drive. Be aware that the total image size is >30Gbi! The instructions for this process and some very helpful scripts are provided here.
+In order to do this, you'll need to pull down all of these images onto a local workstation and then either copy them into your soft-airgap via jumpbox or bring into your hard airgap using physical media like BluRay or a USB key drive. Be aware that the total image size is >30Gbi! The instructions for this process and some very helpful scripts are provided here.
 
 # Manual Provisioning
 > * [Prep Environment](#prep-environment)
@@ -506,6 +506,7 @@ sudo virt-filesystems --long -h --all -a ubuntu-20.04-server-cloudimg-amd64.img
 truncate -r ubuntu-20.04-server-cloudimg-amd64.img ubuntu-rke2.img
 truncate -s +3G ubuntu-rke2.img
 sudo virt-resize --expand /dev/sda1 ubuntu-20.04-server-cloudimg-amd64.img ubuntu-rke2.img
+
 ```
 
 Unfortunately `virt-resize` will also rename the partitions, which will screw up the bootloader. We now have to fix that by using virt-rescue and calling grub-install on the disk.

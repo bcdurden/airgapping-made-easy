@@ -5,6 +5,7 @@ write_files:
   content: |
     token: my-shared-token
     server: https://rke2-airgap-cp:9345
+    system-default-registry: harbor.sienarfleet.systems
 - path: /etc/hosts
   owner: root
   content: |
