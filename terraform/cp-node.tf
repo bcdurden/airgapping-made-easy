@@ -44,7 +44,7 @@ resource "harvester_virtualmachine" "cp-node" {
     bus        = "virtio"
     boot_order = 1
 
-    image       = data.harvester_image.ubuntu-rke2.id
+    image       = harvester_image.ubuntu-rke2.id
     auto_delete = true
   }
 

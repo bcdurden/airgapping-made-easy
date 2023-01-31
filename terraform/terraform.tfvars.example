@@ -1,0 +1,6 @@
+ubuntu_image_name = 
+rke2_image_url = 
+rke2_registry = 
+
+rancher_server_dns = 
+master_vip = 

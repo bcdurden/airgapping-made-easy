@@ -1,3 +1,4 @@
 .terraform*
 *.img
 terraform/kube_config.yaml
+*.tfvars

@@ -8,7 +8,6 @@ variable "worker-hostname" {
 }
 variable "master_vip" {
     type = string
-    default = "10.10.5.4"
 }
 variable "cluster_token" {
     type = string
@@ -16,7 +15,6 @@ variable "cluster_token" {
 }
 variable "rke2_registry" {
     type = string
-    default = "harbor.sienarfleet.systems"
 }
 variable "master_vip_interface" {
     type = string
@@ -36,9 +34,14 @@ variable "rancher_version" {
 }
 variable "rancher_server_dns" {
     type = string
-    default = "rancher.home.sienarfleet.systems"
 }
 variable "rancher_bootstrap_password" {
     type = string
     default = "admin"
+}
+variable "ubuntu_image_name" {
+    type = string
+}
+variable "rke2_image_url" {
+    type = string
 }

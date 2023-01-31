@@ -65,10 +65,6 @@ resource "helm_release" "rancher_server" {
     value = 1
   }
   set {
-    name  = "certmanager.version"
-    value = var.cert_manager_version
-  }
-  set {
     name  = "rancherImage"
     value = "${var.rke2_registry}/rancher/rancher"
   }
@@ -77,7 +73,7 @@ resource "helm_release" "rancher_server" {
     value = "${var.rke2_registry}"
   }
   set {
-    name = "ingress.tls.source"
-    value = "secret"
+    name  = "useBundledSystemChart"
+    value = "true"
   }
 }
