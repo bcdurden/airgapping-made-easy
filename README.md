@@ -214,15 +214,8 @@ harvester_virtualmachine.worker-node: Still creating... [1m30s elapsed]
 harvester_virtualmachine.worker-node (remote-exec): Completed cloud-init!
 harvester_virtualmachine.worker-node: Creation complete after 1m36s [id=default/rke2-airgap-worker]
 helm_release.cert_manager: Creating...
-helm_release.cert_manager: Still creating... [10s elapsed]
-helm_release.cert_manager: Still creating... [20s elapsed]
 helm_release.cert_manager: Creation complete after 20s [id=cert-manager]
 helm_release.rancher_server: Creating...
-helm_release.rancher_server: Still creating... [10s elapsed]
-helm_release.rancher_server: Still creating... [20s elapsed]
-helm_release.rancher_server: Still creating... [30s elapsed]
-helm_release.rancher_server: Still creating... [40s elapsed]
-helm_release.rancher_server: Still creating... [50s elapsed]
 helm_release.rancher_server: Still creating... [1m0s elapsed]
 helm_release.rancher_server: Creation complete after 1m2s [id=rancher]
 
@@ -233,7 +226,7 @@ Apply complete! Resources: 9 added, 0 changed, 0 destroyed.
 
 ```
 
-At this point, Rancher is now starting! I can use the local kubeconfig that was generated as part of Terraform to view the cluster with `kubectl`
+At this point, Rancher is now starting! By the internal timer it only took 5m and 40s!!! That's fast! I can use the local kubeconfig that was generated as part of Terraform to view the cluster with `kubectl`
 ```console
 kubecm add -f kube_config.yaml
 Add Context: kube_config 
