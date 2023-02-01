@@ -11,9 +11,9 @@ You're here and you want to go REAL fast? There's a couple things you'll need to
 * VM image has been created and is fetchable from a URL, see the [vm creation doc](./vm_image_create.md)
 * Create a `terraform.tfvars` file from the [terraform.tfvars.example template](terraform/terraform.tfvars.example) and fill out the values inside
 * Prep your terraform directory using `terraform init` and verify all variables are set using `terraform plan`
-* Migrated this directory tree into your airgap if necessary so you have all the terraform code there
+* Migrate this directory tree into your airgap if necessary so you have all the terraform code there
 
-Once those steps are complete, you can just run `terraform apply` within the `terraform/` directory!
+Once those steps are complete, you can just run `terraform apply` within the `terraform/` directory! Jump to the bottom to see what the output of that looks like.
 
 ## Use Case and Scope
 There are a few use cases addressed here, but each bears some early discussion. This document will cover provisioning and bootstrapping a Rancher Cluster Manager with RKE2 in a manual way and in a more declarative way using Terraform. Both cases will cover a soft-airgap scenario where internal networks do not have or should not have access to the internet or external networks as a general rule. While some cases to exist where a soft-airgap can make use of a whitelist of domains/IPs, we'll assume that doesn't exist in this case.
