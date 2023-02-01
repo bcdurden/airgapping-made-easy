@@ -6,7 +6,7 @@ email: brian.durden@rancherfederal.com
 # Airgapping made easy with RKE2 and Rancher
 
 ## Intro
-In this repo, we're going to cover creation of an RKE2 cluster into Harvester using an airgapped process (aka Bootstrap!). We'll follow that up by installing Rancher on top of RKE2. We're going to do all of this using Terraform. Terraform allows us to declaratively define our environment in code and then create that environment in a straight-forward (and sustainable) way.
+In this repo, we're going to cover creation of an `RKE2` cluster into `Harvester` using an airgapped process (aka Bootstrap!). We'll follow that up by installing Rancher on top of RKE2. We're going to do all of this using `Terraform`. Terraform allows us to declaratively define our environment in code and then create that environment in a straight-forward (and sustainable) way.
 
 ## TL;DR
 You're here and you want to go REAL fast? There's a couple things you'll need to ensure are setup before you're done. All of that is defined here and within the [manual install doc](./manual_install.md). If you're wanting to dive in a bit deeper into some concepts around Airgapping, continue reading!
