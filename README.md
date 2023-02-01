@@ -1,6 +1,7 @@
 ---
 title: Airgapping made easy with RKE2 and Rancher
 author: Brian Durden
+email: brian.durden@rancherfederal.com
 ---
 # Airgapping made easy with RKE2 and Rancher
 
