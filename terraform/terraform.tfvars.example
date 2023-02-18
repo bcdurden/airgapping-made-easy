@@ -4,3 +4,4 @@ rke2_registry =
 
 rancher_server_dns = 
 master_vip = 
+worker_count = 1

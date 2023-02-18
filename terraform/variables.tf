@@ -45,3 +45,7 @@ variable "ubuntu_image_name" {
 variable "rke2_image_url" {
     type = string
 }
+variable "worker_count" {
+    type = string
+    default = 1
+}

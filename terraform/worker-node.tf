@@ -1,5 +1,6 @@
 resource "harvester_virtualmachine" "worker-node" {
-  name                 = "${var.worker-hostname}"
+  count = var.worker_count
+  name                 = "${var.worker-hostname}-${count.index}"
   namespace            = "default"
   restart_after_update = true
   depends_on = [
@@ -66,7 +67,7 @@ resource "harvester_virtualmachine" "worker-node" {
         owner: root
         content: |
           127.0.0.1 localhost
-          127.0.0.1 ${var.worker-hostname}
+          127.0.0.1 ${var.worker-hostname}-${count.index}
           ${var.master_vip} ${var.cp-hostname}
       - path: /etc/rancher/rke2/registries.yaml
         owner: root
