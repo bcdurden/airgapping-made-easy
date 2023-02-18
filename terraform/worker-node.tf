@@ -27,11 +27,11 @@ resource "harvester_virtualmachine" "worker-node" {
     }
   }
 
-  cpu    = 4
-  memory = "8Gi"
+  cpu    = 2
+  memory = "4Gi"
 
   run_strategy = "RerunOnFailure"
-  hostname     = "${var.worker-hostname}"
+  hostname     = "${var.worker-hostname}-${count.index}"
   machine_type = "q35"
 
   ssh_keys = []
